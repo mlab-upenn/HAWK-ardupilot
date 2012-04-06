@@ -23,9 +23,6 @@ void setup() {
   Serial.begin(9600);
   Serial.println("I'm ready");
   
-  //int datasize = sizeof(txdata);
-  
-  //sendData(txdata, datasize);
 }
 
 void sendData(uint8_t *txdata, int datasize) {
@@ -37,10 +34,12 @@ void sendData(uint8_t *txdata, int datasize) {
     //preamble
     mySerial.write(0x06);
     mySerial.write(0x85);
+    mySerial.flush();
     Serial.println("Sent preamble.");
     
     //size
     mySerial.write(datasize);
+    mySerial.flush();
     Serial.print("Sent size: ");
     Serial.println(datasize,HEX);
     
@@ -49,11 +48,13 @@ void sendData(uint8_t *txdata, int datasize) {
     for (j=0; j<datasize; j++) {
       CS ^= txdata[j]; //CS
       mySerial.write(txdata[j]);
+      mySerial.flush();
       Serial.print("Sent: ");
       Serial.println(txdata[j],HEX);
     }
  
     mySerial.write(CS);
+    mySerial.flush();
     Serial.print("Sent CS: ");
     Serial.println(CS,HEX);
     CS = datasize;
@@ -64,16 +65,14 @@ void sendData(uint8_t *txdata, int datasize) {
     response = mySerial.read();
 
     if (response == ACK) {
-      Serial.print("Received ACK: ");
-      Serial.println(response,HEX);
+      Serial.print("Received ACK");
       Serial.println("Sent data to Kevin successfully");
       break;
     }
     else if (response == NACK) {
       //don't increment, and try again
       i--;
-      Serial.print("Received NACK: ");
-      Serial.println(response,HEX);
+      Serial.print("Received NACK");
     }
     else if (response == LAND) {
       Serial.println("Telling ArduPilot to land quadrotor");
@@ -151,7 +150,7 @@ uint8_t receiveData() {
 }
 
 void loop() {
-  //txdata = (uint8_t)malloc(sizeof(uint8_t));
+  //txdata = (uint8_t*)malloc(sizeof(uint8_t));
   int datasize = sizeof(txdata);
   
   sendData(txdata, datasize);
