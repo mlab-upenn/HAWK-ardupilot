@@ -5,9 +5,6 @@
 //orange (TX) - 2 (RX)
 //yellow (RX) - 3 (TX)
 
-#define MAX_TRIES 3
-#define ACK 0xFE
-#define NACK 0xFD
 #define LAND 0xAA
 
 #define RX 2
@@ -15,13 +12,10 @@
 
 SoftwareSerial mySerial(RX, TX);
 
-uint8_t rxdata;
-uint8_t txdata[25] = "Hello, World";
-
 void setup() {
   mySerial.begin(9600);
   Serial.begin(9600);
-  Serial.println("I'm ready");
+  Serial.println("Program started.");
   
 }
 
@@ -29,101 +23,79 @@ void sendData(uint8_t *txdata, int datasize) {
   uint8_t buf;
   uint8_t CS = datasize;
   
-  int i;
-  for (i=0; i<MAX_TRIES; i++) {
-    //preamble
-    mySerial.write(0x06);
-    mySerial.write(0x85);
-    mySerial.flush();
-    Serial.println("Sent preamble.");
+  //preamble
+  mySerial.write(0x06);
+  mySerial.write(0x85);
+  mySerial.flush();
+  Serial.println("Sent preamble.");
+   
+  //size
+  mySerial.write(datasize);
+  mySerial.flush();
+  Serial.print("Sent size: ");
+  Serial.println(datasize,HEX);
     
-    //size
-    mySerial.write(datasize);
+  //data
+  int j;
+  for (j=0; j<datasize; j++) {
+    CS ^= txdata[j]; //CS
+    mySerial.write(txdata[j]);
     mySerial.flush();
-    Serial.print("Sent size: ");
-    Serial.println(datasize,HEX);
-    
-    //data
-    int j;
-    for (j=0; j<datasize; j++) {
-      CS ^= txdata[j]; //CS
-      mySerial.write(txdata[j]);
-      mySerial.flush();
-      Serial.print("Sent: ");
-      Serial.println(txdata[j],HEX);
-    }
- 
-    mySerial.write(CS);
-    mySerial.flush();
-    Serial.print("Sent CS: ");
-    Serial.println(CS,HEX);
-    CS = datasize;
-    
-    //handshake
-    uint8_t response;
-    delay(100);
-    response = mySerial.read();
-
-    if (response == ACK) {
-      Serial.print("Received ACK");
-      Serial.println("Sent data to Kevin successfully");
-      break;
-    }
-    else if (response == NACK) {
-      //don't increment, and try again
-      i--;
-      Serial.print("Received NACK");
-    }
-    else if (response == LAND) {
-      Serial.println("Telling ArduPilot to land quadrotor");
-    }
-    else {
-      //proceed with the loop
-    }
+    Serial.print("Sent data: ");
+    Serial.println(txdata[j],HEX);
   }
+  
+  //checksum
+  mySerial.write(CS);
+  mySerial.flush();
+  Serial.print("Sent CS: ");
+  Serial.println(CS,HEX);
 }
 
-uint8_t receiveData() {
-  while(mySerial.available() == 0);
-  Serial.println("Passed blocking");
-  
+//try to receive data and put it in rxdata (pass in address of a pointer)
+//returns num bytes of received packet, or 0 if unsuccessful
+//automatically frees pointer if it was being used before
+uint8_t receiveData(uint8_t **rxdata) {
   uint8_t buf;
-  //TODO: malloc
-  uint8_t CS = 1;
-  rxdata = 0;
+  uint8_t CS;
+  
+  if (mySerial.available() == 0)
+    return 0;
   
   //preamble
   buf = mySerial.read();
   Serial.println(buf,HEX);
   if (buf != 0x06) {
-    buf = NACK;
-    Serial.print("About to send: ");
-    Serial.println(buf);
-    mySerial.write(buf);
-    Serial.println("Sent NACK");
     return 0;
   }
   buf = mySerial.read();
   Serial.println(buf,HEX);
   if (buf != 0x85) {
-    buf = NACK;
-    Serial.print("About to send: ");
-    Serial.println(buf);
-    mySerial.write(buf);
-    Serial.println("Sent NACK");
     return 0;
   }
   Serial.println("Received preamble");
   
   //size
   uint8_t data_size = mySerial.read();
+  Serial.print("Expecting to receive size: ");
   Serial.println(data_size);
   
+  if(rxdata != 0)
+    free(rxdata);
+  *rxdata = 0;
+  *rxdata = (uint8_t *) malloc(data_size);
+  
+  CS = data_size;
+  
   //data
-  //received data = (uint8_t)malloc(data_size*sizeof(uint8_t))
-  rxdata = mySerial.read();
-  Serial.println(rxdata,HEX);
-  CS ^= rxdata;
+  int i;
+  for (i = 0; i < data_size; i++) {
+    *((*rxdata) + i) = mySerial.read();
+    Serial.print("Data received: ");
+    Serial.println(*((*rxdata) + i), HEX);
+    CS ^= *((*rxdata) + i);
+  }
+  Serial.print("CS calculated: ");
   Serial.println(CS,HEX);
 
   //CS
@@ -131,32 +103,16 @@ uint8_t receiveData() {
   Serial.print("CS received: ");
   Serial.println(buf,HEX);
   if (buf != CS) {
-    buf = NACK;
-    Serial.print("About to send: ");
-    Serial.println(buf);
-    mySerial.write(buf);
-    Serial.println("Checksum did not match");
+    Serial.println("Checksum did not match.");
     return 0;
   }
   else {
-    buf = ACK;
-    Serial.print("About to send: ");
-    Serial.println(buf);
-    mySerial.write(buf);
-    Serial.println("Received data from Kevin");
-    return 1;
+    Serial.println("Received data successfully.");
+    return data_size;
   }
   
 }
 
 void loop() {
-  //txdata = (uint8_t*)malloc(sizeof(uint8_t));
-  int datasize = sizeof(txdata);
-  
-  sendData(txdata, datasize);
-  
-  //receiveData();
-  
-  //delay(10); 
-  
+  while(1);
 }
