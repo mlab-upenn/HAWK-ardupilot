@@ -22,6 +22,7 @@ int  maxdelta;  // "delta" amount that triggers updating the reference frame
 char  firstframe;  
 char outputmode;
 //top, arm1, arm2, arm3, arm4, bottom
+//2back,bottom,1right,4front,3left,top
 int dist[6] = {0, 0, 0, 0, 0, 0};
 int RCin[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 int RCold[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -50,29 +51,15 @@ void setup() {
   delay(20);
   pinMode(RXpin, INPUT); //make it HI Z
   Serial.begin(115200);
-  Tam_InitArduino(1);
-  for (i=0; i<IMAGESIZE; ++i) {
-    refimage[i] = inpimage[i] = 0;
-    cal[i] = EEPROM.read(CalibrationMaskAddress+2*i);
-    cal[i] += short(EEPROM.read(CalibrationMaskAddress+2*i+1))<<8;
-  }
-  //dumpCommandList();
-  firstframe=1; 
-  accx=accy=0; // reset accumulations
-  maxdelta=500; // square of displacement that triggers updating frame
-  outputmode = 0; // set initial output mode to quiet
+  
 }
 
 void loop() {
   short i;
+  
+
+//  read_pings();
   /*
-  APM_RC.OutputCh(0,MOTOR_STOP);
-  APM_RC.OutputCh(1,MOTOR_STOP);
-  APM_RC.OutputCh(2,MOTOR_STOP);
-  APM_RC.OutputCh(4,MOTOR_STOP);
-  */
-  framecounter++;
-  read_pings();
   Tam2LoadSubimageCharCalibrated(12,2,12,2,inpimage,cal); //subtract noise from last image
   // If odometer is being reset (or at startup) then perform the following sequence
   if (firstframe) {
@@ -97,36 +84,27 @@ void loop() {
     odox = accx + ofx;
     odoy = accy + ofy;
   }    
-  //Serial.print("x:");
-  //Serial.print(odox);
-  //Serial.print(" y:");
-  //Serial.print(odoy);
-  //Serial.print(" ");
   if (outputmode==1) {
     Serial.print(odox);
     Serial.print(" ");
     Serial.println(odoy);
   }
   serial_commands();  
+  */
+  
   for(i = 0; i < 8; i++) {
     RCin[i] = channel_filter(i, APM_RC.InputCh(i), RCold[i]);
     RCtrans[i] = RCin[i]; 
-    /*
-    if(i == 4) {
-      int temp = RCtrans[4];
-      RCtrans[4] = RCtrans[3];
-      RCtrans[3] = temp;  
-    } 
-    */
     RCold[i] = RCtrans[i];
   }
+  /*
   for(i = 0; i < 8; i++) {
     Serial.print(RCtrans[i]);
     Serial.print(", "); 
   }
   
   Serial.println();
-  
+  */
   for(i = 0; i < 8; i++) {
     APM_RC.OutputCh(i, RCtrans[i]);
   }
@@ -198,6 +176,7 @@ void IIA2(char *X1, char *X2, float *ofx, float *ofy) {
 
 
 int channel_filter(int ch, int val, int old_val) {  
+  //2back,bottom,1right,4front,3left,top
   //return val;  
   switch(ch) {
     case 0: 
@@ -208,6 +187,14 @@ int channel_filter(int ch, int val, int old_val) {
       else if(RCold[0] - val > MAX_D) {
         val = RCold[0] - MAX_D;  
       }
+      /*
+      if(val > 1516 && dist[2] <= 50) {
+        val = 1516; 
+      }
+      else if(val < 1516 && dist[4] <= 50) {
+        val = 1516;  
+      }
+      */
       break;
     case 1: 
       val = ((val - 1470)*200./414. + 1500); 
@@ -217,6 +204,14 @@ int channel_filter(int ch, int val, int old_val) {
       else if(RCold[1] - val > MAX_D) {
         val = RCold[1] - MAX_D;  
       }
+      /*
+      if(val < 1520 && dist[3] <= 50) {
+        val = 1520;  
+      }
+      else if(val > 1520 && dist[0] <= 50) {
+        val = 1520;  
+      }
+      */
       break;
     case 2:
       /*  
@@ -228,7 +223,9 @@ int channel_filter(int ch, int val, int old_val) {
         val = RCold[2] - MAX_D;  
       }*/
       val = val;
+      //find a steady hover value
       break;
+      //2back,bottom,1right,4front,3left,top
     case 3: 
       val = ((val - 1468)*1./2. + 1500);   
       if(val - RCold[3] > MAX_D) {
@@ -237,6 +234,7 @@ int channel_filter(int ch, int val, int old_val) {
       else if(RCold[3] - val > MAX_D) {
         val = RCold[3] - MAX_D;  
       }
+      
       break;
     case 4: case 5: case 6: case 7:
       val = val;                             
